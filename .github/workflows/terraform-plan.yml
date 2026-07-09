@@ -1,0 +1,23 @@
+name: Terraform plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+      - run: terraform fmt -check
+      - run: terraform init -backend=false
+      - run: terraform plan
+        # el apply se ejecuta manualmente en local (no hay runner con acceso
+        # al Docker daemon del host de desarrollo - ver Seccion 4.1 del plan)

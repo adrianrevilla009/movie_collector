@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+uv.lock.bak
+
+# Env / secrets
+.env
+!.env.example
+*.pem
+*.key
+
+# Terraform
+infra/terraform/**/.terraform/
+infra/terraform/**/terraform.tfstate
+infra/terraform/**/terraform.tfstate.backup
+infra/terraform/**/.terraform.lock.hcl
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Data / artifacts (nunca versionar datos crudos ni artifacts de modelos en git)
+data/
+*.parquet
+mlruns/
+mlartifacts/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Cassettes de VCR (fixtures grabadas) SI se versionan explicitamente en tests/fixtures/
+# no se ignoran aqui a proposito - son las fixtures deterministas del CI

@@ -1,0 +1,38 @@
+[project]
+name = "platform-core"
+version = "0.1.0"
+description = "Backbone: model registry wrapper, contrato de serving, feature store, monitorizacion"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.2",
+    "email-validator>=2.2.0",
+    "uvicorn[standard]>=0.31.0",
+    "sqlalchemy>=2.0.35",
+    "alembic>=1.13.3",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "redis>=5.1.0",
+    "structlog>=24.4.0",
+    "argon2-cffi>=23.1.0",
+    "pyjwt>=2.9.0",
+    "zxcvbn>=4.4.28",
+    "slowapi>=0.1.9",
+    "python-multipart>=0.0.12",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "testcontainers[postgres]>=4.8.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/platform_core"]
