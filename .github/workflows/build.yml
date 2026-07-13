@@ -1,0 +1,16 @@
+name: Build images
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [platform, ingestion]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }} -f ${{ matrix.service }}/Dockerfile .

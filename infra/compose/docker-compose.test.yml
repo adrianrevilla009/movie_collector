@@ -1,0 +1,16 @@
+# Variante de docker-compose.dev.yml para tests de integracion locales manuales
+# (fuera de CI, donde testcontainers-python levanta sus propios contenedores
+# efimeros). Usa una base de datos y puertos distintos para no chocar con `dev`.
+include:
+  - docker-compose.dev.yml
+
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}_test
+    ports:
+      - "5433:5432"
+
+  redis:
+    ports:
+      - "6380:6379"
