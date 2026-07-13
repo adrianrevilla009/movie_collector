@@ -130,6 +130,13 @@ services:
     image: prom/prometheus:v2.55.0
     profiles: ["observability"]
     networks: [observability, core]
+    extra_hosts:
+      # El backend corre en el host (uvicorn --reload, no como servicio de
+      # Compose - ver Makefile), no dentro de la red `core` - se necesita
+      # este mapeo para que el scrape de /metrics le llegue (Fase 1).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
 
@@ -141,6 +148,13 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      # NO se anida bajo /etc/grafana/provisioning (arriba) - montar un
+      # segundo bind-mount dentro de un directorio que ya es un bind-mount
+      # de solo lectura falla ("read-only file system") porque Docker no
+      # puede crear el punto de montaje dentro de el. Ruta separada en su
+      # lugar; el `path` del provider en dashboards.yml apunta aqui.
+      - ../observability/grafana/dashboards:/etc/grafana/dashboards:ro
 
   loki:
     image: grafana/loki:3.2.0
@@ -153,6 +167,9 @@ services:
     image: grafana/tempo:2.6.0
     profiles: ["observability"]
     networks: [observability]
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ../observability/tempo.yml:/etc/tempo.yaml:ro
     ports:
       - "3200:3200"
       - "4317:4317"

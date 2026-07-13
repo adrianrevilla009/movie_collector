@@ -69,7 +69,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 async def login(
     request: Request, response: Response, payload: LoginRequest, db: AsyncSession = Depends(get_db)
 ):
-    user = await auth_service.authenticate_user(db, payload.email, payload.password)
+    client_ip = request.client.host if request.client else None
+    user = await auth_service.authenticate_user(db, payload.email, payload.password, client_ip)
     access_token = create_access_token(user.id, user.role.value)
     raw_refresh, _ = await auth_service.issue_refresh_token(
         db,
@@ -103,21 +104,29 @@ async def refresh(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
     refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
 ):
     if refresh_token:
-        await auth_service.revoke_refresh_token(db, refresh_token)
+        await auth_service.revoke_refresh_token(
+            db, refresh_token, request.client.host if request.client else None
+        )
     _clear_refresh_cookie(response)
     return {"message": "Sesion cerrada"}
 
 
 @router.post("/logout-all")
 async def logout_all(
-    response: Response, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    await auth_service.revoke_all_sessions(db, user.id)
+    await auth_service.revoke_all_sessions(
+        db, user.id, request.client.host if request.client else None
+    )
     _clear_refresh_cookie(response)
     return {"message": "Todas las sesiones cerradas"}
 

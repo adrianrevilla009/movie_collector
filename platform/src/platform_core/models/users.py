@@ -79,6 +79,6 @@ class AuthAttempt(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(320), index=True)
-    ip_address: Mapped[str] = mapped_column(INET, index=True)
+    ip_address: Mapped[str | None] = mapped_column(INET, nullable=True, index=True)
     success: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

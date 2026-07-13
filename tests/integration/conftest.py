@@ -7,6 +7,14 @@ Un job de integracion separado (con Docker disponible en el runner) los correria
 sin ese filtro.
 """
 
+import os
+
+# Tiene que fijarse ANTES de que nada importe platform_core (get_settings()
+# esta cacheado con @lru_cache): el tracing OTLP intenta exportar a Tempo, que
+# no esta levantado en CI/tests - sin esto no rompe nada (el exporter falla en
+# background), pero anade ruido/latencia de reintentos que no aporta nada aqui.
+os.environ.setdefault("OTEL_ENABLED", "false")
+
 import sys
 from pathlib import Path
 
@@ -17,6 +25,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 PLATFORM_ROOT = Path(__file__).resolve().parents[2] / "platform"
 sys.path.insert(0, str(PLATFORM_ROOT / "src"))
@@ -25,6 +34,16 @@ sys.path.insert(0, str(PLATFORM_ROOT / "src"))
 @pytest.fixture(scope="session")
 def postgres_container():
     with PostgresContainer("postgres:16.4") as container:
+        yield container
+
+
+@pytest.fixture(scope="session")
+def redis_container():
+    """El rate limiter de /auth/login pasa a ser Redis-backed (Fase 0.2, gap
+    detectado en la revision de cierre de Fase 0: antes vivia en memoria y no
+    sobrevivia entre workers). Los tests de integracion necesitan un Redis
+    real para ejercer ese comportamiento igual que en produccion."""
+    with RedisContainer("redis:7.4-alpine") as container:
         yield container
 
 
@@ -66,7 +85,8 @@ async def _clean_database_between_tests(db_session_factory):
                 "lists, list_items, reports, notifications, feedback, "
                 "refresh_tokens, email_verification_tokens, password_reset_tokens, "
                 "auth_attempts, bronze_ingestions, credits, people, collections, "
-                "genres, movie_genres, keywords, movie_keywords, watch_providers "
+                "genres, movie_genres, keywords, movie_keywords, watch_providers, "
+                "ml_models, feature_values "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -75,14 +95,19 @@ async def _clean_database_between_tests(db_session_factory):
 
 
 @pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    """El limitador de /auth/login (5 intentos/15min) usa almacenamiento en
-    memoria compartido por TODO el proceso de pytest, no por test. Sin
-    resetearlo, el test de fuerza bruta agota el cupo y arruina cualquier
-    test posterior que necesite loguear de verdad (encontrado corriendo en
-    CI: 429 en vez del 403/200 esperado en tests que ni tocan ese limite)."""
+def _reset_rate_limiter(redis_container):
+    """El limitador de /auth/login (5 intentos/15min) ahora persiste en Redis
+    (ver gap #1 de la revision de Fase 0), no en memoria del proceso - se
+    apunta al Redis efimero de test y se limpia entre tests para que un test
+    de fuerza bruta no agote el cupo de los siguientes."""
+    import limits.storage
     from platform_core.security.rate_limit import limiter
 
+    redis_url = (
+        f"redis://{redis_container.get_container_host_ip()}"
+        f":{redis_container.get_exposed_port(6379)}/0"
+    )
+    limiter._storage = limits.storage.storage_from_string(redis_url)
     limiter.reset()
     yield
     limiter.reset()

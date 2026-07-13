@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,11 +28,18 @@ async def update_profile(
 
 @router.post("/change-password")
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await account_service.change_password(db, user, payload.current_password, payload.new_password)
+    await account_service.change_password(
+        db,
+        user,
+        payload.current_password,
+        payload.new_password,
+        request.client.host if request.client else None,
+    )
     return {"message": "Contrasena actualizada"}
 
 

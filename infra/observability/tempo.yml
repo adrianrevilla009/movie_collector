@@ -1,0 +1,23 @@
+# Config minima de Tempo (tracing). No forma parte de los entregables de la
+# Fase 1 (que solo pide "logs + metricas" - Seccion: Fase 1), pero sin ningun
+# archivo montado Tempo arranca sin backend de storage definido y crashea en
+# bucle ("unknown backend ''"). Backend local (sin S3/GCS) porque el alcance
+# del proyecto es 100% local (Seccion 7).
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+        http:
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal

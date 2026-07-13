@@ -56,6 +56,30 @@ class Settings(BaseSettings):
     # Region por defecto para watch providers (Seccion 2.3)
     default_region: str = "ES"
 
+    # Seed de admin (Seccion 2.4, `make seed-admin`): se leen aqui via
+    # pydantic-settings (igual que el resto de la config) en vez de pasarse
+    # como argumentos de shell desde el Makefile - `make` en Windows invoca
+    # cmd.exe por defecto, que no entiende sintaxis POSIX (`set -a`, `. ./.env`),
+    # asi que cualquier logica de carga de .env debia vivir en Python, no en
+    # el Makefile, para funcionar igual en Windows/Mac/Linux.
+    admin_email: str = "admin@cine-platform.local"
+    admin_password: str = "changeme"
+    admin_name: str = "Admin"
+
+    # Tracing (Tempo, profile `observability`): el backend corre en el host
+    # (uvicorn --reload, ver Makefile/README), no dentro de la red `core` de
+    # Docker - por eso el endpoint por defecto es `localhost`, aprovechando
+    # que el puerto 4317 de Tempo ya se publica al host en docker-compose.dev.yml
+    # (igual que el ajuste de Prometheus->host.docker.internal, pero en sentido
+    # inverso: aqui es la app quien sale hacia el contenedor, no al reves).
+    otel_service_name: str = "platform-core"
+    otel_exporter_otlp_endpoint: str = "localhost:4317"
+    # Apagable explicitamente (ej. en tests o si no se ha levantado el
+    # profile observability): el exporter falla en silencio si Tempo no esta
+    # arriba (BatchSpanProcessor es best-effort), pero evita el overhead/ruido
+    # de intentarlo cuando se sabe de antemano que no hace falta.
+    otel_enabled: bool = True
+
     @property
     def database_url(self) -> str:
         return (

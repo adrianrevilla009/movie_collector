@@ -231,11 +231,15 @@ sistema de auth real (aunque el proveedor de email sea local, no cloud).
 
 - **Versionado**: todos los endpoints bajo el prefijo `/api/v1/...` desde el primer commit
   — un cambio incompatible futuro es una `v2` nueva, nunca una ruptura silenciosa de `v1`.
-- **Paginacion**: cursor-based (`?cursor=...&limit=20`, cursor opaco = ID codificado) para
-  listados que crecen sin limite conocido (`GET /movies`, `GET /movies/{id}/reviews`,
-  `GET /users/me/notifications`); offset simple (`?page=...&size=...`) aceptable solo para
-  los rankings, que tienen un tamano acotado y estable. Se fija cursor-based por defecto
-  para no tener que migrar paginacion offset a mitad de proyecto cuando el catalogo crezca.
+- **Paginacion**: offset simple (`?page=...&size=...`) en todos los listados, incluidos
+  `GET /movies`/`GET /movies/search` y los rankings — **decision revisada durante la
+  implementacion de la Fase 0.3** (ver ADR 0003). La version original de esta seccion fijaba
+  cursor-based para listados sin tamano acotado, pero se implemento offset de forma
+  consistente en toda la Fase 0.3 (necesita numero total de paginas para el paginador del
+  frontend, con desempate estable por `id` en cada criterio de orden para que no se solapen
+  ni salten filas entre paginas). Se documenta aqui la decision real en vez de dejar una
+  discrepancia entre plan y codigo; revisitar solo si el catalogo completo (~1M titulos) hace
+  que el `COUNT(*)` de `total` empiece a doler en el `EXPLAIN ANALYZE` real.
 - **Formato de error estandar**: RFC 7807 (`application/problem+json`): `{type, title,
   status, detail, instance}` en toda respuesta de error 4xx/5xx, generado por un exception
   handler global de FastAPI — nunca un `{"error": "..."}` ad-hoc por endpoint.
@@ -689,8 +693,8 @@ abre hasta que la anterior esta cerrada, igual que las fases numeradas grandes.
     Fase 2 — Seccion 2.7),
   - rankings: `GET /rankings/top-rated`, `GET /rankings/trending`,
     `GET /rankings/most-controversial`,
-  - todos bajo `/api/v1/...`, paginacion cursor-based, formato de error RFC 7807
-    (Seccion 2.6),
+  - todos bajo `/api/v1/...`, paginacion offset (`page`/`size`, ver Seccion 2.6 y ADR 0003),
+    formato de error RFC 7807 (Seccion 2.6),
   - bucket `public-media` en MinIO sirviendo posters/backdrops directamente (Seccion 4.5).
 - Definition of done: se puede navegar el catalogo completo (buscar, filtrar por persona/
   genero/decada, ver ficha de pelicula/actor/coleccion con trailer, y consultar los tres
