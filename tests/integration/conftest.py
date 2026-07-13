@@ -14,6 +14,7 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
@@ -48,6 +49,43 @@ async def db_session_factory(_migrated_sync_url, postgres_container):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
     await engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _clean_database_between_tests(db_session_factory):
+    """El Postgres de testcontainers es UNICO para toda la sesion (levantarlo
+    por test seria demasiado lento), pero eso significa que los datos de un
+    test contaminan el siguiente si no se limpian - varios tests usan
+    movie_id=1 a proposito y chocaban con "duplicate key" (encontrado
+    corriendo de verdad en CI). TRUNCATE ... CASCADE antes de cada test deja
+    la base vacia sin tener que rehacer el contenedor ni las migraciones."""
+    async with db_session_factory() as session:
+        await session.execute(
+            text(
+                "TRUNCATE TABLE users, movies, ratings, reviews, review_votes, "
+                "lists, list_items, reports, notifications, feedback, "
+                "refresh_tokens, email_verification_tokens, password_reset_tokens, "
+                "auth_attempts, bronze_ingestions, credits, people, collections, "
+                "genres, movie_genres, keywords, movie_keywords, watch_providers "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
+        await session.commit()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """El limitador de /auth/login (5 intentos/15min) usa almacenamiento en
+    memoria compartido por TODO el proceso de pytest, no por test. Sin
+    resetearlo, el test de fuerza bruta agota el cupo y arruina cualquier
+    test posterior que necesite loguear de verdad (encontrado corriendo en
+    CI: 429 en vez del 403/200 esperado en tests que ni tocan ese limite)."""
+    from platform_core.security.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest_asyncio.fixture
