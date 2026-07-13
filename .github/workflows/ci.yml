@@ -25,6 +25,24 @@ jobs:
       - name: pip-audit (dependency vulnerabilities)
         run: uv run pip-audit || true  # no bloquea CI todavia, se endurece en Fase 6 (OWASP A06)
 
+  integration-tests:
+    runs-on: ubuntu-latest
+    # testcontainers levanta su propio Postgres efimero via el Docker daemon
+    # que ya viene preinstalado y corriendo en los runners de GitHub Actions -
+    # no hace falta un servicio `services:` aparte ni configuracion adicional.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.11.x"
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Sync workspace
+        run: uv sync --all-packages
+      - name: Integration tests (Postgres real via testcontainers)
+        run: uv run pytest -m integration -v
+
   lint-and-test-frontend:
     runs-on: ubuntu-latest
     defaults:

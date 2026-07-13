@@ -14,8 +14,16 @@ from platform_core.db import Base  # noqa: E402
 config = context.config
 settings = get_settings()
 
-sync_url = settings.database_url.replace("+asyncpg", "")
-config.set_main_option("sqlalchemy.url", sync_url)
+# alembic.ini trae un placeholder por defecto (Config.set_main_option nunca
+# devuelve None una vez leido el .ini). Si alguien ya fijo una URL real de
+# forma programatica ANTES de invocar alembic (ej. los tests de integracion,
+# que apuntan al Postgres efimero de testcontainers, no al de desarrollo),
+# hay que respetarla - sobreescribirla siempre aqui rompia esos tests, que
+# acababan migrando la base de datos equivocada sin dar ningun error.
+_PLACEHOLDER_URL = "driver://user:pass@localhost/dbname"
+if config.get_main_option("sqlalchemy.url") == _PLACEHOLDER_URL:
+    sync_url = settings.database_url.replace("+asyncpg", "")
+    config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

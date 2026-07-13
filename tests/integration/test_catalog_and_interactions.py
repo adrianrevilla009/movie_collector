@@ -50,6 +50,57 @@ async def test_catalog_navigation_without_login(app_client, db_session_factory):
 
 
 @pytest.mark.asyncio
+async def test_search_is_typo_tolerant(app_client, db_session_factory):
+    """Regresion: pg_trgm debe estar activo (ver migracion 9ec12fa70bcc). Sin
+    la extension, /movies/search devuelve 500 en vez de resultados tolerantes
+    a errores tipograficos - esto es justo lo que fallo en produccion."""
+    await _seed_movie(db_session_factory, movie_id=1, title="Toy Story")
+
+    r = await app_client.get("/api/v1/movies/search", params={"q": "toy stroy"})
+    assert r.status_code == 200
+    assert any(m["title"] == "Toy Story" for m in r.json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_movies_pagination_pages_do_not_overlap(app_client, db_session_factory):
+    """Regresion: ORDER BY sin desempate estable podia repetir o saltarse
+    peliculas entre paginas con OFFSET/LIMIT (encontrado probando en real)."""
+    for i in range(1, 26):
+        await _seed_movie(db_session_factory, movie_id=i, title=f"Pelicula {i}", vote_count=10 + i)
+
+    r1 = await app_client.get("/api/v1/movies", params={"page": 1, "size": 10})
+    r2 = await app_client.get("/api/v1/movies", params={"page": 2, "size": 10})
+    d1, d2 = r1.json(), r2.json()
+
+    assert d1["total"] == 25
+    assert d1["total_pages"] == 3
+    ids1 = {m["id"] for m in d1["items"]}
+    ids2 = {m["id"] for m in d2["items"]}
+    assert ids1.isdisjoint(ids2)
+    assert len(ids1) == 10
+    assert len(ids2) == 10
+
+
+@pytest.mark.asyncio
+async def test_rankings_top_rated_pagination(app_client, db_session_factory):
+    """Mismo regresion que arriba, pero para el ranking bayesiano (tiene su
+    propio ORDER BY independiente del listado normal)."""
+    for i in range(1, 16):
+        await _seed_movie(
+            db_session_factory, movie_id=i, title=f"Rankeada {i}", vote_count=100, vote_average=7.0
+        )
+
+    r1 = await app_client.get("/api/v1/rankings/top-rated", params={"page": 1, "size": 10})
+    r2 = await app_client.get("/api/v1/rankings/top-rated", params={"page": 2, "size": 10})
+    d1, d2 = r1.json(), r2.json()
+
+    assert d1["total"] == 15
+    ids1 = {m["id"] for m in d1["items"]}
+    ids2 = {m["id"] for m in d2["items"]}
+    assert ids1.isdisjoint(ids2)
+
+
+@pytest.mark.asyncio
 async def test_rating_upsert_no_duplicates(app_client, db_session_factory):
     await _seed_movie(db_session_factory)
     token = await _register_and_login(app_client)
