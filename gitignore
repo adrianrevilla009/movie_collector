@@ -8,20 +8,23 @@ uv.lock.bak
 
 # Env / secrets
 .env
+.env.local
 !.env.example
 *.pem
 *.key
 
 # Terraform
+# .terraform.lock.hcl SI se versiona (como uv.lock/pnpm-lock.yaml): fija las
+# versiones exactas de providers para builds reproducibles entre maquinas.
 infra/terraform/**/.terraform/
 infra/terraform/**/terraform.tfstate
 infra/terraform/**/terraform.tfstate.backup
-infra/terraform/**/.terraform.lock.hcl
 
 # Node / frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
 
 # Data / artifacts (nunca versionar datos crudos ni artifacts de modelos en git)
 data/
@@ -29,16 +32,25 @@ data/
 mlruns/
 mlartifacts/
 
+# Estado local de ingestion (checkpoint de backfill resumible, Seccion 2.1)
+.ingestion_checkpoints/
+
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
+*.swp
 
 # Test / coverage
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .ruff_cache/
+
+# Logs
+*.log
 
 # Cassettes de VCR (fixtures grabadas) SI se versionan explicitamente en tests/fixtures/
 # no se ignoran aqui a proposito - son las fixtures deterministas del CI

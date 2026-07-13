@@ -7,11 +7,34 @@ import asyncio
 import time
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+import structlog
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from ingestion.config import get_ingestion_settings
 
 settings = get_ingestion_settings()
+logger = structlog.get_logger("ingestion.tmdb_client")
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """401/403/404 son errores permanentes (key invalida, recurso no existe):
+    reintentarlos solo malgasta el presupuesto de backoff sin arreglarlos.
+    Solo se reintenta lo transitorio: errores de transporte, 429 y 5xx."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return False
+
+
+def _log_before_retry(retry_state) -> None:
+    exc = retry_state.outcome.exception()
+    logger.warning(
+        "tmdb_request_retry",
+        attempt=retry_state.attempt_number,
+        wait_seconds=round(retry_state.next_action.sleep, 1),
+        error=str(exc),
+    )
 
 
 class _RateLimiter:
@@ -41,9 +64,10 @@ class TMDBClient:
         await self._client.aclose()
 
     @retry(
-        retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
+        retry=retry_if_exception(_is_retryable),
         wait=wait_exponential(multiplier=1, min=1, max=30),
         stop=stop_after_attempt(5),
+        before_sleep=_log_before_retry,
         reraise=True,
     )
     async def _get(self, path: str, params: dict | None = None) -> dict:

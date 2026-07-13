@@ -24,6 +24,11 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 settings = get_settings()
 
 REFRESH_COOKIE_NAME = "refresh_token"
+# Cookie NO httpOnly, sin nada sensible dentro (solo "1"): permite al frontend
+# saber si "probablemente hay sesion" sin poder leer el refresh token real,
+# para evitar una llamada a /auth/refresh en cada carga cuando claramente no
+# hay sesion (evita ruido de un 401 esperado en la consola del navegador).
+SESSION_MARKER_COOKIE_NAME = "has_session"
 
 
 def _set_refresh_cookie(response: Response, raw_token: str) -> None:
@@ -34,6 +39,18 @@ def _set_refresh_cookie(response: Response, raw_token: str) -> None:
         secure=(settings.environment == "production"),
         samesite="strict",
     )
+    response.set_cookie(
+        SESSION_MARKER_COOKIE_NAME,
+        "1",
+        httponly=False,
+        secure=(settings.environment == "production"),
+        samesite="strict",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(REFRESH_COOKIE_NAME)
+    response.delete_cookie(SESSION_MARKER_COOKIE_NAME)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -92,7 +109,7 @@ async def logout(
 ):
     if refresh_token:
         await auth_service.revoke_refresh_token(db, refresh_token)
-    response.delete_cookie(REFRESH_COOKIE_NAME)
+    _clear_refresh_cookie(response)
     return {"message": "Sesion cerrada"}
 
 
@@ -101,7 +118,7 @@ async def logout_all(
     response: Response, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     await auth_service.revoke_all_sessions(db, user.id)
-    response.delete_cookie(REFRESH_COOKIE_NAME)
+    _clear_refresh_cookie(response)
     return {"message": "Todas las sesiones cerradas"}
 
 

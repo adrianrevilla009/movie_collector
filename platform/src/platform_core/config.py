@@ -1,6 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# config.py vive en platform/src/platform_core/config.py; la raiz del repo
+# (donde vive el .env real) esta 3 niveles arriba. Se resuelve como ruta
+# absoluta a proposito: pydantic-settings resuelve env_file relativo al
+# directorio de trabajo (CWD) del proceso, no al de este archivo, asi que un
+# ".env" relativo se rompe en cuanto alguien ejecuta el comando desde otro
+# directorio (ej. `cd platform && alembic upgrade head`) - eso paso de verdad
+# probando en Windows y hizo que las credenciales cayeran silenciosamente a
+# los valores por defecto ("changeme").
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
@@ -11,7 +22,7 @@ class Settings(BaseSettings):
     secretos que se decida via ADR cuando exista despliegue en cloud.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_REPO_ROOT_ENV, extra="ignore")
 
     # Postgres
     postgres_user: str = "changeme"

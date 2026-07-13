@@ -70,6 +70,8 @@ async def transform_bronze_to_silver(db_session_factory: async_sessionmaker) -> 
             movie.vote_count = payload.get("vote_count", 0)
             movie.vote_average = payload.get("vote_average", 0.0)
             movie.adult = False
+            movie.poster_path = payload.get("poster_path")
+            movie.backdrop_path = payload.get("backdrop_path")
             movie.is_complete = _is_complete(payload)
             movie.videos = payload.get("videos", {}).get("results", [])
             movie.raw_metadata = payload

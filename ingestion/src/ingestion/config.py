@@ -1,10 +1,16 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# config.py vive en ingestion/src/ingestion/config.py; la raiz del repo esta
+# 3 niveles arriba. Ruta absoluta a proposito - ver el mismo comentario en
+# platform_core/config.py (bug real detectado probando en Windows).
+_REPO_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
+
 
 class IngestionSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_REPO_ROOT_ENV, extra="ignore")
 
     tmdb_api_key: str = "changeme"
     omdb_api_key: str = "changeme"
@@ -17,6 +23,7 @@ class IngestionSettings(BaseSettings):
 
     tmdb_base_url: str = "https://api.themoviedb.org/3"
     tmdb_requests_per_second: float = 35.0  # margen bajo el limite real (~40 rps)
+    tmdb_concurrency: int = 10  # peticiones en vuelo a la vez (ver docs/adr/0003)
 
     # Alcance de desarrollo (Seccion PLAN de Fase 0.1): subconjunto acotado por
     # defecto; el backfill completo real se lanza explicitamente con --full.

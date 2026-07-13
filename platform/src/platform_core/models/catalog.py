@@ -51,6 +51,8 @@ class Movie(Base):
     vote_count: Mapped[int] = mapped_column(Integer, default=0)
     vote_average: Mapped[float] = mapped_column(default=0.0)
     adult: Mapped[bool] = mapped_column(Boolean, default=False)
+    poster_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    backdrop_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Filtro de calidad, no de cobertura (Seccion 2.1): se ingesta el 100% de IDs,
     # pero solo se marca "completo" lo que tiene senal minima.
     is_complete: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

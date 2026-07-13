@@ -3,8 +3,13 @@
 Idempotente y reanudable: guarda un checkpoint (ultimo indice procesado) fuera
 de memoria, en un archivo local, para poder interrumpirse y reanudar sin
 duplicar trabajo ni perder progreso (ver mlops-pipelines).
+
+Procesa en lotes concurrentes (ver docs/adr/0003): secuencial-uno-a-uno
+malgastaba el margen del rate limiter (35 req/s) porque el cuello de botella
+real era esperar la respuesta de cada peticion, no el propio limite.
 """
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
@@ -46,6 +51,16 @@ def load_dev_movie_ids(limit: int) -> list[int]:
     return list(range(1, limit + 1))
 
 
+async def _fetch_one(
+    client: TMDBClient, movie_id: int
+) -> tuple[int, dict | None, Exception | None]:
+    try:
+        payload = await client.get_movie(movie_id)
+        return movie_id, payload, None
+    except Exception as exc:  # fallo esperable de dependencia externa
+        return movie_id, None, exc
+
+
 async def run_backfill(
     db_session_factory: async_sessionmaker, movie_ids: list[int], full: bool = False
 ) -> dict:
@@ -56,32 +71,39 @@ async def run_backfill(
     client = TMDBClient()
     processed = 0
     errors = 0
+    concurrency = settings.tmdb_concurrency
 
     try:
-        for idx in range(start_index, len(movie_ids)):
-            movie_id = movie_ids[idx]
-            try:
-                payload = await client.get_movie(movie_id)
-            except Exception as exc:  # fallo esperable de dependencia externa
-                logger.warning("backfill_movie_failed", movie_id=movie_id, error=str(exc))
-                errors += 1
-                continue
+        idx = start_index
+        while idx < len(movie_ids):
+            chunk = movie_ids[idx : idx + concurrency]
+            results = await asyncio.gather(*(_fetch_one(client, mid) for mid in chunk))
 
+            # Un solo commit por lote, no uno por pelicula (ver mlops-pipelines
+            # sobre evitar chatty writes) - y el checkpoint solo avanza tras
+            # confirmarse el lote entero, para que una interrupcion a mitad de
+            # lote no marque como procesado lo que no se llego a escribir.
             async with db_session_factory() as session:
-                session.add(
-                    BronzeIngestion(
-                        source=BronzeSource.tmdb,
-                        entity_type=BronzeEntityType.movie,
-                        external_id=str(movie_id),
-                        raw_payload=payload,
-                        ingested_at=datetime.now(UTC),
-                        ingestion_run_id=run_id,
+                for movie_id, payload, exc in results:
+                    if exc is not None:
+                        logger.warning("backfill_movie_failed", movie_id=movie_id, error=str(exc))
+                        errors += 1
+                        continue
+                    session.add(
+                        BronzeIngestion(
+                            source=BronzeSource.tmdb,
+                            entity_type=BronzeEntityType.movie,
+                            external_id=str(movie_id),
+                            raw_payload=payload,
+                            ingested_at=datetime.now(UTC),
+                            ingestion_run_id=run_id,
+                        )
                     )
-                )
+                    processed += 1
                 await session.commit()
 
-            processed += 1
-            checkpoint["last_processed_index"] = idx
+            idx += len(chunk)
+            checkpoint["last_processed_index"] = idx - 1
             _save_checkpoint(checkpoint)
 
         logger.info("backfill_completed", processed=processed, errors=errors, full=full)

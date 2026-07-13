@@ -1,21 +1,49 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider, createBrowserRouter } from "react-router-dom";
+import { Outlet, RouterProvider, createBrowserRouter } from "react-router-dom";
+import { AuthProvider } from "./lib/auth-context";
+import { NavBar } from "./components/NavBar";
+import { Home } from "./pages/Home";
+import { Search } from "./pages/Search";
+import { MovieDetail } from "./pages/MovieDetail";
+import { Rankings } from "./pages/Rankings";
+import { Login } from "./pages/Login";
+import { Register } from "./pages/Register";
+import { VerifyEmail } from "./pages/VerifyEmail";
 
-// Mapa de rutas fijado en el plan (Seccion 4.3): se completa pagina a pagina
-// a partir de la Fase 0.3 (catalogo). Fase 0.1 solo monta el esqueleto.
+function Layout() {
+  return (
+    <>
+      <NavBar />
+      <Outlet />
+    </>
+  );
+}
+
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <div className="p-8 text-center text-lg">Cine Platform - en construccion</div>,
+    element: <Layout />,
+    children: [
+      { path: "/", element: <Home /> },
+      { path: "/buscar", element: <Search /> },
+      { path: "/peliculas/:id", element: <MovieDetail /> },
+      { path: "/rankings/:type", element: <Rankings /> },
+      { path: "/login", element: <Login /> },
+      { path: "/registro", element: <Register /> },
+      { path: "/verificar-email", element: <VerifyEmail /> },
+    ],
   },
 ]);
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+});
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

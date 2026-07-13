@@ -1,4 +1,4 @@
-import base64
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -11,7 +11,6 @@ from platform_core.schemas.catalog import (
     CollectionOut,
     GenreOut,
     MovieDetailOut,
-    MovieListItemOut,
     PaginatedMovies,
     PersonOut,
 )
@@ -21,25 +20,23 @@ router = APIRouter(prefix="/api/v1", tags=["catalog"])
 settings = get_settings()
 
 
-def _encode_cursor(movie_id: int) -> str:
-    return base64.urlsafe_b64encode(str(movie_id).encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> int:
-    try:
-        return int(base64.urlsafe_b64decode(cursor.encode()).decode())
-    except Exception as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Cursor invalido") from exc
+def _paginated(items: list[Movie], total: int, page: int, size: int) -> PaginatedMovies:
+    return PaginatedMovies(
+        items=items,
+        page=page,
+        size=size,
+        total=total,
+        total_pages=max(1, math.ceil(total / size)) if size else 1,
+    )
 
 
 @router.get("/movies", response_model=PaginatedMovies)
 async def list_movies(
     db: AsyncSession = Depends(get_db),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=20, le=100),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
 ):
-    cursor_id = _decode_cursor(cursor) if cursor else None
-    movies = await catalog_service.search_movies(
+    movies, total = await catalog_service.search_movies(
         db,
         query=None,
         genre_id=None,
@@ -47,12 +44,11 @@ async def list_movies(
         person_id=None,
         region=settings.default_region,
         sort="popularidad_desc",
-        limit=limit,
-        cursor_id=cursor_id,
+        page=page,
+        size=size,
         provider_id=None,
     )
-    next_cursor = _encode_cursor(movies[-1].id) if len(movies) == limit else None
-    return PaginatedMovies(items=movies, next_cursor=next_cursor)
+    return _paginated(movies, total, page, size)
 
 
 @router.get("/movies/search", response_model=PaginatedMovies)
@@ -67,11 +63,10 @@ async def search_movies(
     ),
     region: str = Query(default=settings.default_region),
     sort: str = Query(default="relevancia"),
-    cursor: str | None = None,
-    limit: int = Query(default=20, le=100),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
 ):
-    cursor_id = _decode_cursor(cursor) if cursor else None
-    movies = await catalog_service.search_movies(
+    movies, total = await catalog_service.search_movies(
         db,
         query=q,
         genre_id=genre_id,
@@ -79,12 +74,11 @@ async def search_movies(
         person_id=person_id,
         region=region,
         sort=sort,
-        limit=limit,
-        cursor_id=cursor_id,
+        page=page,
+        size=size,
         provider_id=provider_id,
     )
-    next_cursor = _encode_cursor(movies[-1].id) if len(movies) == limit else None
-    return PaginatedMovies(items=movies, next_cursor=next_cursor)
+    return _paginated(movies, total, page, size)
 
 
 @router.get("/movies/{movie_id}", response_model=MovieDetailOut)
@@ -140,28 +134,35 @@ async def list_genres(db: AsyncSession = Depends(get_db)):
     return list(result)
 
 
-@router.get("/rankings/top-rated", response_model=list[MovieListItemOut])
+@router.get("/rankings/top-rated", response_model=PaginatedMovies)
 async def rankings_top_rated(
     db: AsyncSession = Depends(get_db),
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, le=100),
+    size: int = Query(default=20, ge=1, le=100),
 ):
-    return await catalog_service.top_rated(db, limit=size, offset=(page - 1) * size)
+    movies, total = await catalog_service.top_rated(db, limit=size, offset=(page - 1) * size)
+    return _paginated(movies, total, page, size)
 
 
-@router.get("/rankings/trending", response_model=list[MovieListItemOut])
+@router.get("/rankings/trending", response_model=PaginatedMovies)
 async def rankings_trending(
     db: AsyncSession = Depends(get_db),
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, le=100),
+    size: int = Query(default=20, ge=1, le=100),
 ):
-    return await catalog_service.trending_internal(db, limit=size, offset=(page - 1) * size)
+    movies, total = await catalog_service.trending_internal(
+        db, limit=size, offset=(page - 1) * size
+    )
+    return _paginated(movies, total, page, size)
 
 
-@router.get("/rankings/most-controversial", response_model=list[MovieListItemOut])
+@router.get("/rankings/most-controversial", response_model=PaginatedMovies)
 async def rankings_most_controversial(
     db: AsyncSession = Depends(get_db),
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, le=100),
+    size: int = Query(default=20, ge=1, le=100),
 ):
-    return await catalog_service.most_controversial(db, limit=size, offset=(page - 1) * size)
+    movies, total = await catalog_service.most_controversial(
+        db, limit=size, offset=(page - 1) * size
+    )
+    return _paginated(movies, total, page, size)

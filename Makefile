@@ -2,6 +2,7 @@
         ingest test lint tf-plan tf-apply sync
 
 COMPOSE_FILE := infra/compose/docker-compose.dev.yml
+COMPOSE := docker compose -f $(COMPOSE_FILE) --env-file .env
 
 ## Instala todo el monorepo (uv workspace) + frontend (pnpm)
 sync:
@@ -12,27 +13,32 @@ sync:
 up: up-core
 
 up-core:
-	docker compose -f $(COMPOSE_FILE) --profile core up -d
+	$(COMPOSE) --profile core up -d
 
 up-assistant:
-	docker compose -f $(COMPOSE_FILE) --profile assistant up -d
+	$(COMPOSE) --profile assistant up -d
 
 up-fraud:
-	docker compose -f $(COMPOSE_FILE) --profile fraud up -d
+	$(COMPOSE) --profile fraud up -d
 
 up-observability:
-	docker compose -f $(COMPOSE_FILE) --profile observability up -d
+	$(COMPOSE) --profile observability up -d
 
 up-storage:
-	docker compose -f $(COMPOSE_FILE) --profile storage up -d
+	$(COMPOSE) --profile storage up -d
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
+	$(COMPOSE) down
+
+## Aplica las migraciones de Alembic (necesario tras el primer `up-core`
+## o siempre que se recree el volumen de Postgres desde cero)
+migrate:
+	cd platform && uv run --package platform-core alembic upgrade head
 
 ## Backfill + sincronizacion incremental del catalogo (bronze -> silver)
 ## Por defecto usa el alcance acotado de desarrollo (INGESTION_DEV_BACKFILL_LIMIT).
 ## Backfill completo real: make ingest ARGS="--full"
-ingest:
+ingest: migrate
 	uv run --package ingestion python -m ingestion.cli backfill $(ARGS)
 	uv run --package ingestion python -m ingestion.cli transform
 	uv run --package ingestion python -m ingestion.cli seed-movielens
@@ -48,4 +54,4 @@ tf-plan:
 	cd infra/terraform && terraform fmt -check && terraform plan
 
 tf-apply:
-	cd infra/terraform && terraform apply
+	cd infra/terraform && terraform init && terraform apply

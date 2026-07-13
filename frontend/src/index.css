@@ -1,1 +1,50 @@
 @import "tailwindcss";
+
+@theme {
+  /* Paleta: marquesina de cine antigua, no el cliche IA de negro+neon */
+  --color-bg: #14121a;
+  --color-surface: #1e1b26;
+  --color-surface-raised: #272330;
+  --color-border: #35303f;
+  --color-marquee: #e8a33d; /* dorado de bombillas de marquesina */
+  --color-marquee-dim: #a97430;
+  --color-reel: #b23a48; /* rojo carrete - alertas, "en directo", flagged */
+  --color-text: #f2efea;
+  --color-text-muted: #9c96a8;
+
+  --font-display: "Bebas Neue", "Inter Tight", sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+/* Firma visual: borde perforado tipo fotograma de pelicula de 35mm.
+   Un solo elemento distintivo, usado con moderacion (bajo la nav y
+   enmarcando secciones destacadas), no repetido por toda la pagina. */
+.film-perf {
+  background-image: radial-gradient(circle, var(--color-border) 1.5px, transparent 1.6px);
+  background-size: 14px 14px;
+  background-position: center;
+  height: 6px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-marquee);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -13,6 +13,7 @@ class MovieListItemOut(BaseModel):
     release_date: str | None
     vote_average: float
     popularity: float | None
+    poster_path: str | None
     model_config = {"from_attributes": True}
 
 
@@ -27,6 +28,8 @@ class MovieDetailOut(BaseModel):
     vote_average: float
     collection_id: int | None
     videos: list | None
+    poster_path: str | None
+    backdrop_path: str | None
     model_config = {"from_attributes": True}
 
 
@@ -48,4 +51,7 @@ class CollectionOut(BaseModel):
 
 class PaginatedMovies(BaseModel):
     items: list[MovieListItemOut]
-    next_cursor: str | None
+    page: int
+    size: int
+    total: int
+    total_pages: int
