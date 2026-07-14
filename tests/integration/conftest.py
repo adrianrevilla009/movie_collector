@@ -55,24 +55,35 @@ def redis_container():
 def _reset_rate_limiter(redis_container):
     """El objeto `Limiter` de slowapi (platform_core.security.rate_limit) se
     construye UNA VEZ, en su primer import, leyendo `settings.redis_url` en
-    ese momento - parchear `limiter._storage` DESPUES de esa construccion no
-    sirve (slowapi/limits cachean la estrategia de rate-limiting contra el
-    storage original; encontrado en CI: seguia intentando conectar a
-    `localhost:6379` de verdad). La fijacion correcta es poner `REDIS_URL`
-    en el entorno ANTES de la primera vez que se importe ese modulo.
+    ese momento. Dos trampas distintas aqui, ambas confirmadas corriendo de
+    verdad en CI:
 
-    Esto funciona sin necesidad de un hook a nivel de sesion porque pytest
-    garantiza que los fixtures `autouse` de un scope se resuelven antes que
-    los explicitos del mismo scope - este fixture (autouse, function-scoped)
-    corre antes que `app_client` (explicito, function-scoped) para cualquier
-    test dado, así que el import de `platform_core.security.rate_limit` que
-    hace este fixture (al hacer `from ... import limiter`) es siempre el
-    primero de toda la sesion, con `REDIS_URL` ya fijado.
+    1. `get_settings()` esta decorado con `@lru_cache` - y la coleccion de
+       pytest (que importa TODOS los archivos bajo `testpaths`, incluidos los
+       de `platform/tests/`, sin importar el filtro `-m`) ya dispara un
+       `import platform_core.models -> platform_core.db -> get_settings()`
+       antes de que corra ningun fixture. Esa primera llamada queda cacheada
+       con el `REDIS_URL` por defecto - fijar la variable de entorno despues
+       no sirve de nada sin invalidar tambien esa cache.
+    2. Parchear `limiter._storage` DESPUES de construido el objeto tampoco
+       sirve (slowapi/limits cachean la estrategia de rate-limiting contra el
+       storage original).
+
+    La correccion: limpiar la cache de `get_settings` Y fijar `REDIS_URL`
+    ANTES del primer `import` de `security.rate_limit` - que, gracias a que
+    pytest resuelve los fixtures `autouse` antes que los explicitos del mismo
+    scope, sigue siendo siempre este fixture (antes que `app_client`) para
+    cualquier test, incluido el primero de toda la sesion.
     """
     os.environ["REDIS_URL"] = (
         f"redis://{redis_container.get_container_host_ip()}"
         f":{redis_container.get_exposed_port(6379)}/0"
     )
+
+    from platform_core.config import get_settings
+
+    get_settings.cache_clear()
+
     from platform_core.security.rate_limit import limiter
 
     limiter.reset()
