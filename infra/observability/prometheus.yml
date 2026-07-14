@@ -1,0 +1,24 @@
+# Configuracion minima de Prometheus (Fase 1, entregables: "monitorizacion
+# base (logs + metricas)"). Monta este archivo en el contenedor `prometheus`
+# del profile `observability` (ver infra/compose/docker-compose.dev.yml).
+#
+# El backend (platform-core) expone /metrics en texto Prometheus via
+# `prometheus_client` (ver platform_core/monitoring/metrics.py) - sin exporter
+# aparte, scrape directo.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "platform-core"
+    metrics_path: /metrics
+    static_configs:
+      # El backend NO corre como servicio de Compose (se lanza con
+      # `uvicorn --reload` en el host para iteracion rapida, ver Makefile) -
+      # se scrapea via `host.docker.internal`, resuelto por el `extra_hosts`
+      # del servicio `prometheus` en docker-compose.dev.yml (funciona igual en
+      # Linux/Mac/Windows con Docker >=20.10, no solo en Docker Desktop).
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: "platform-core"

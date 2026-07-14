@@ -1,0 +1,67 @@
+{
+  "title": "Fase 1 - Salud del registry de modelos",
+  "uid": "ml-platform-health",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Predicciones servidas por modelo (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(ml_predictions_total[1m])) by (model_name, status)",
+          "legendFormat": "{{model_name}} ({{status}})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Latencia de prediccion p95 (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ml_prediction_latency_seconds_bucket[5m])) by (le, model_name))",
+          "legendFormat": "{{model_name}} p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Modelos actualmente en produccion",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "ml_models_in_production == 1",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Tasa de error de prediccion (5m)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(ml_predictions_total{status=\"error\"}[5m])) / sum(rate(ml_predictions_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "decimals": 1 }
+      }
+    }
+  ]
+}

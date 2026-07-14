@@ -10,11 +10,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_core.email.mailer import send_password_reset_email, send_verification_email
 from platform_core.models import (
+    AuthAttempt,
     EmailVerificationToken,
     List,
     PasswordResetToken,
     RefreshToken,
     User,
+)
+from platform_core.security.audit import (
+    log_login_failure,
+    log_login_success,
+    log_logout,
 )
 from platform_core.security.passwords import (
     WeakPasswordError,
@@ -64,16 +70,29 @@ async def register_user(db: AsyncSession, email: str, name: str, password: str) 
     return user
 
 
-async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
+async def authenticate_user(
+    db: AsyncSession, email: str, password: str, ip_address: str | None = None
+) -> User:
     user = await db.scalar(select(User).where(User.email == email))
     if (
         user is None
         or user.deleted_at is not None
         or not verify_password(password, user.password_hash)
     ):
+        db.add(AuthAttempt(email=email, ip_address=ip_address, success=False))
+        await db.commit()
+        log_login_failure(email, ip_address, reason="credenciales_invalidas")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
+
     if user.is_banned:
+        db.add(AuthAttempt(email=email, ip_address=ip_address, success=False))
+        await db.commit()
+        log_login_failure(email, ip_address, reason="cuenta_suspendida")
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Cuenta suspendida")
+
+    db.add(AuthAttempt(email=email, ip_address=ip_address, success=True))
+    await db.commit()
+    log_login_success(user.id, email, ip_address)
     return user
 
 
@@ -146,15 +165,20 @@ async def rotate_refresh_token(
     return user, new_raw
 
 
-async def revoke_refresh_token(db: AsyncSession, raw_token: str) -> None:
+async def revoke_refresh_token(
+    db: AsyncSession, raw_token: str, ip_address: str | None = None
+) -> None:
     token_hash = hash_refresh_token(raw_token)
     stored = await db.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     if stored is not None and stored.revoked_at is None:
         stored.revoked_at = datetime.now(UTC)
         await db.commit()
+        log_logout(stored.user_id, all_sessions=False, ip_address=ip_address)
 
 
-async def revoke_all_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
+async def revoke_all_sessions(
+    db: AsyncSession, user_id: uuid.UUID, ip_address: str | None = None
+) -> None:
     tokens = await db.scalars(
         select(RefreshToken).where(
             RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None)
@@ -164,6 +188,7 @@ async def revoke_all_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
     for t in tokens:
         t.revoked_at = now
     await db.commit()
+    log_logout(user_id, all_sessions=True, ip_address=ip_address)
 
 
 async def verify_email(db: AsyncSession, raw_token: str) -> None:

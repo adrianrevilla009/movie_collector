@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_core.models import List, ListItem, Notification, Rating, Review, User
+from platform_core.security.audit import log_password_change
 from platform_core.security.passwords import (
     WeakPasswordError,
     hash_password,
@@ -31,7 +32,11 @@ async def update_profile(db: AsyncSession, user: User, name: str | None, email: 
 
 
 async def change_password(
-    db: AsyncSession, user: User, current_password: str, new_password: str
+    db: AsyncSession,
+    user: User,
+    current_password: str,
+    new_password: str,
+    ip_address: str | None = None,
 ) -> None:
     if not verify_password(current_password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Contrasena actual incorrecta")
@@ -43,6 +48,7 @@ async def change_password(
     user.password_hash = hash_password(new_password)
     await revoke_all_sessions(db, user.id)
     await db.commit()
+    log_password_change(user.id, ip_address)
 
 
 async def delete_account(db: AsyncSession, user: User) -> None:

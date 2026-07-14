@@ -20,6 +20,7 @@ from platform_core.models.interactions import (
     Review,
     ReviewVote,
 )
+from platform_core.models.ml_platform import DummyModelKind, FeatureValue, MLModel, ModelStage
 from platform_core.models.moderation import (
     Feedback,
     FeedbackCategory,
@@ -70,4 +71,8 @@ __all__ = [
     "Feedback",
     "FeedbackCategory",
     "Notification",
+    "MLModel",
+    "ModelStage",
+    "DummyModelKind",
+    "FeatureValue",
 ]

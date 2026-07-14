@@ -9,7 +9,10 @@ el metodo de trabajo por fases en [`docs/working-method.md`](docs/working-method
 
 ## Estado actual
 
-**Fase 0.1 — Cimientos tecnicos e ingestion** (en curso).
+**Fase 0 (0.1-0.5) cerrada** y **Fase 1 — Plataforma ML interna (backbone)** implementada:
+registry de modelos con versionado/stage, contrato de serving unico, feature store minimo,
+y monitorizacion base (Prometheus + dashboard de Grafana provisionado). Siguiente:
+Fase 2 (modulo recomendador).
 
 ## Estructura del repo
 
@@ -31,8 +34,21 @@ make sync              # instala backend (uv workspace) + frontend (pnpm)
 make tf-apply          # crea redes/volumenes persistentes (una vez)
 make up                # levanta el profile 'core' de Docker Compose
 make ingest             # backfill acotado (dev) + transformacion + seed MovieLens
+make seed-admin        # crea el usuario admin de seed (Seccion 2.4)
 make test
 ```
+
+El backend (`platform-core`) y el frontend corren en el host, no como servicios de
+Compose (iteracion rapida con `--reload`/HMR):
+
+```bash
+cd platform && uv run --package platform-core uvicorn platform_core.app:app --reload
+cd frontend && pnpm dev
+```
+
+Observabilidad (Prometheus + Grafana, con el dashboard de salud del registry de modelos
+de la Fase 1 ya provisionado): `make up-observability`, luego Grafana en
+`http://localhost:3000` (admin/admin por defecto).
 
 Requisitos: Python 3.12, Node.js 20 LTS, `uv`, `pnpm`, Docker + Docker Compose v2,
 Terraform >= 1.7.
