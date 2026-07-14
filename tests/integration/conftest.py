@@ -39,12 +39,45 @@ def postgres_container():
 
 @pytest.fixture(scope="session")
 def redis_container():
-    """El rate limiter de /auth/login pasa a ser Redis-backed (Fase 0.2, gap
-    detectado en la revision de cierre de Fase 0: antes vivia en memoria y no
-    sobrevivia entre workers). Los tests de integracion necesitan un Redis
-    real para ejercer ese comportamiento igual que en produccion."""
+    """El rate limiter de /auth/login es Redis-backed (Fase 0.2). Session-
+    scoped (no por-test) para no pagar el arranque del contenedor en cada
+    test - y sobre todo, perezoso: solo se instancia si algun test que lo
+    necesita (via `_reset_rate_limiter`, mas abajo) llega a ejecutarse. Si
+    esto fuera eager (ej. en un hook `pytest_configure`), el job rapido de CI
+    (`pytest -m "not integration and not e2e"`, sin Docker) se rompería
+    aunque no fuera a correr ni un test de integracion - se probo y paso
+    justo eso."""
     with RedisContainer("redis:7.4-alpine") as container:
         yield container
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter(redis_container):
+    """El objeto `Limiter` de slowapi (platform_core.security.rate_limit) se
+    construye UNA VEZ, en su primer import, leyendo `settings.redis_url` en
+    ese momento - parchear `limiter._storage` DESPUES de esa construccion no
+    sirve (slowapi/limits cachean la estrategia de rate-limiting contra el
+    storage original; encontrado en CI: seguia intentando conectar a
+    `localhost:6379` de verdad). La fijacion correcta es poner `REDIS_URL`
+    en el entorno ANTES de la primera vez que se importe ese modulo.
+
+    Esto funciona sin necesidad de un hook a nivel de sesion porque pytest
+    garantiza que los fixtures `autouse` de un scope se resuelven antes que
+    los explicitos del mismo scope - este fixture (autouse, function-scoped)
+    corre antes que `app_client` (explicito, function-scoped) para cualquier
+    test dado, así que el import de `platform_core.security.rate_limit` que
+    hace este fixture (al hacer `from ... import limiter`) es siempre el
+    primero de toda la sesion, con `REDIS_URL` ya fijado.
+    """
+    os.environ["REDIS_URL"] = (
+        f"redis://{redis_container.get_container_host_ip()}"
+        f":{redis_container.get_exposed_port(6379)}/0"
+    )
+    from platform_core.security.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture(scope="session")
@@ -92,25 +125,6 @@ async def _clean_database_between_tests(db_session_factory):
         )
         await session.commit()
     yield
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter(redis_container):
-    """El limitador de /auth/login (5 intentos/15min) ahora persiste en Redis
-    (ver gap #1 de la revision de Fase 0), no en memoria del proceso - se
-    apunta al Redis efimero de test y se limpia entre tests para que un test
-    de fuerza bruta no agote el cupo de los siguientes."""
-    import limits.storage
-    from platform_core.security.rate_limit import limiter
-
-    redis_url = (
-        f"redis://{redis_container.get_container_host_ip()}"
-        f":{redis_container.get_exposed_port(6379)}/0"
-    )
-    limiter._storage = limits.storage.storage_from_string(redis_url)
-    limiter.reset()
-    yield
-    limiter.reset()
 
 
 @pytest_asyncio.fixture
